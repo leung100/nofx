@@ -100,6 +100,13 @@ npm run format:check
   - `websocket_client.go` - WebSocket streams for real-time price updates
   - `monitor.go` - Aggregates market data across traders
 - `pool/` - Coin pool management (default coins, AI500 API, OI Top API)
+- `news/` - News monitoring and filtering (optional):
+  - `twitter_monitor.go` - Twitter monitoring via Nitter RSS (Trump, Elon, SEC, regulators)
+  - `crypto_news.go` - CryptoPanic API + RSS feeds aggregation
+  - `whale_alerts.go` - Whale Alert API for large transactions (>$50M)
+  - `sentiment.go` - Keyword-based sentiment analysis
+  - `news_context.go` - Main orchestrator, parallel fetching, formatting
+  - `ai_filter.go` - Optional DeepSeek sub-agent for AI-powered news scoring (0-10)
 - `logger/` - Decision logging, Telegram integration, structured logging
 - `auth/` - JWT authentication, 2FA support, admin mode
 
@@ -109,7 +116,12 @@ npm run format:check
 3. Each `AutoTrader` runs an independent decision loop:
    - Fetches account balance, positions via `Trader` interface
    - Calls `market.Data` to get klines + technical indicators
-   - Generates prompt with `PromptManager`
+   - **(Optional)** If `enable_news_monitoring` enabled: Fetches news context via `news.BuildNewsContext()`
+     - Polls Twitter (Nitter RSS), CryptoPanic, Whale Alert APIs in parallel
+     - Applies keyword filtering (macro-aware, time-based, deduplication)
+     - **(Optional)** If `ENABLE_AI_NEWS_FILTER=true`: DeepSeek sub-agent scores news 0-10, keeps ≥7
+     - Formats as bilingual markdown, injects at top of prompt
+   - Generates prompt with `PromptManager` (includes news context if enabled)
    - Sends to AI via `decision.Engine`
    - Parses JSON decision (actions: open_long/short, close_long/short, hold, wait)
    - Executes trades via exchange-specific `Trader` implementation
@@ -155,6 +167,18 @@ npm run format:check
 2. **Database** (primary) - All runtime configuration stored in SQLite, editable via web UI
 
 **Priority**: Database always takes precedence. `config.json` only used to seed initial values.
+
+**News Monitoring Environment Variables** (`.env` file):
+- `ENABLE_AI_NEWS_FILTER` - Enable AI-powered news filtering (default: `false`)
+  - `true`: DeepSeek sub-agent scores news 0-10, keeps only score ≥7 (cost: ~$1.86/month)
+  - `false`: Uses keyword filtering only (free, still filters 85-90% noise)
+- `DEEPSEEK_API_KEY` - DeepSeek API key for news filtering sub-agent (separate from trading agent)
+- `CRYPTOPANIC_API_KEY` - Optional CryptoPanic API key for better rate limits (free tier available)
+- `NITTER_INSTANCE` - Nitter instance for Twitter monitoring (default: `nitter.net`)
+- `AI_FILTER_BASE_URL` - DeepSeek API base URL (default: `https://api.deepseek.com/v1`)
+- `AI_FILTER_MODEL` - Model for news filtering (default: `deepseek-chat`)
+
+**Note**: News monitoring toggle (`enable_news_monitoring`) is per-trader and configured in UI. Environment variables control AI filtering behavior system-wide.
 
 ## Development Guidelines
 
@@ -216,6 +240,66 @@ npm run format:check
 - Import: `github.com/markcheno/go-talib`
 - Add calculation in `market/data.go:FetchMarketData()`
 - Update `market.Data` struct with new fields
+
+### Working with News Monitoring
+
+**Architecture**:
+- **Two-tier filtering**: Keyword filtering (always) → Optional AI filtering (DeepSeek sub-agent)
+- **Modular design**: Can disable via `ENABLE_AI_NEWS_FILTER=false` or per-trader via UI toggle
+- **Graceful fallback**: If AI filter fails, falls back to keyword filtering automatically
+
+**News Sources** (`news/` package):
+- `twitter_monitor.go`: Polls Nitter RSS for tweets from Trump, Elon, SEC, regulators, exchange CEOs
+- `crypto_news.go`: Polls CryptoPanic API + RSS feeds (CoinDesk, CoinTelegraph)
+- `whale_alerts.go`: Polls Whale Alert API for transactions >$50M
+- All sources fetched in parallel every trading cycle
+
+**Filtering Pipeline**:
+1. **Keyword filtering** (always applied):
+   - Critical keywords: SEC, ETF, hack, tariffs, Fed, trade war, regulatory action
+   - Time-based windows: Critical <60 min, Important <30 min
+   - Deduplication by title similarity
+   - Result: 3-9 items per cycle (from 20-30 raw items)
+
+2. **AI filtering** (optional, if `ENABLE_AI_NEWS_FILTER=true`):
+   - Sends filtered items to DeepSeek sub-agent for scoring (0-10)
+   - Keeps only items with score ≥7
+   - Understands context, sarcasm, macro signals without explicit keywords
+   - Result: 3-5 highest quality items
+   - Cost: ~$0.00013 per cycle (~$1.86/month)
+
+**Integration Points**:
+- `decision/engine.go:buildUserPrompt()` - Checks `ctx.EnableNewsMonitoring` flag
+- If enabled: Calls `news.BuildNewsContext()` and injects formatted markdown at top of prompt
+- Main trading agent receives news as formatted text (never sees scores or filtering logic)
+
+**Adding New News Sources**:
+1. Create new file in `news/` package (e.g., `reddit_monitor.go`)
+2. Implement fetching function that returns slice of items with `Timestamp`, `Content`, `Sentiment`
+3. Add parallel fetch in `news_context.go:BuildNewsContext()`
+4. Add filtering logic (keyword or AI will auto-apply)
+5. Update `Format()` to include new source section
+
+**Modifying Filtering**:
+- **Keyword thresholds**: Edit `news/twitter_monitor.go`, `crypto_news.go`, `whale_alerts.go`
+- **AI score threshold**: Edit `news/ai_filter.go:55` (default: 7)
+- **Time windows**: Edit filtering functions (criticalKeywords <60min, important <30min)
+- **Max items**: Edit `news/news_context.go:161,177,194` (currently 3 per category)
+
+**Testing News Monitoring**:
+1. Create trader with `enable_news_monitoring` checked in UI
+2. Set `ENABLE_AI_NEWS_FILTER=true` in `.env` (optional)
+3. Start trader and wait for first cycle (3 min default)
+4. Check `decision_logs/{trader_id}/cycle_*.txt` for news section
+5. Verify news appears at top of prompt as bilingual markdown
+
+**Troubleshooting**:
+- No news appearing: Check trader has `enable_news_monitoring=true` in database
+- AI filter not working: Check `.env` has `DEEPSEEK_API_KEY` set
+- Rate limits: Get free API keys from CryptoPanic and Whale Alert
+- Too much noise: Increase AI score threshold or tighten keyword filters
+
+**Documentation**: See `NEWS_MONITORING_GUIDE.md` for complete user guide.
 
 ### API Development
 
