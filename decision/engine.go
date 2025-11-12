@@ -1,6 +1,7 @@
 package decision
 
 import (
+	"nofx/news"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -85,6 +86,7 @@ type Context struct {
 	Performance     interface{}             `json:"-"` // 历史表现分析（logger.PerformanceAnalysis）
 	BTCETHLeverage  int                     `json:"-"` // BTC/ETH杠杆倍数（从配置读取）
 	AltcoinLeverage int                     `json:"-"` // 山寨币杠杆倍数（从配置读取）
+	EnableNewsMonitoring bool               `json:"-"` // Whether news monitoring is enabled
 }
 
 // Decision AI的交易决策
@@ -360,6 +362,16 @@ func buildSystemPrompt(accountEquity float64, btcEthLeverage, altcoinLeverage in
 // buildUserPrompt 构建 User Prompt（动态数据）
 func buildUserPrompt(ctx *Context) string {
 	var sb strings.Builder
+
+	// NEW: Add news context if enabled
+	if ctx.EnableNewsMonitoring {
+		newsCtx, err := news.BuildNewsContext()
+		if err == nil && newsCtx != nil {
+			sb.WriteString(news.Format(newsCtx))
+		} else if err != nil {
+			log.Printf("⚠️ [News] Failed to fetch news context: %v", err)
+		}
+	}
 
 	// 系统状态
 	sb.WriteString(fmt.Sprintf("时间: %s | 周期: #%d | 运行: %d分钟\n\n",

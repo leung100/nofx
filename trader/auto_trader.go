@@ -75,6 +75,9 @@ type AutoTraderConfig struct {
 
 	// 系统提示词模板
 	SystemPromptTemplate string // 系统提示词模板名称（如 "default", "aggressive"）
+
+	// 新闻监控
+	EnableNewsMonitoring bool // 是否启用新闻监控
 }
 
 // AutoTrader 自动交易器
@@ -624,9 +627,10 @@ func (at *AutoTrader) buildTradingContext() (*decision.Context, error) {
 			MarginUsedPct:    marginUsedPct,
 			PositionCount:    len(positionInfos),
 		},
-		Positions:      positionInfos,
-		CandidateCoins: candidateCoins,
-		Performance:    performance, // 添加历史表现分析
+		Positions:            positionInfos,
+		CandidateCoins:       candidateCoins,
+		Performance:          performance,          // 添加历史表现分析
+		EnableNewsMonitoring: at.config.EnableNewsMonitoring, // 新闻监控开关
 	}
 
 	return ctx, nil

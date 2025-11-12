@@ -25,6 +25,7 @@ interface TraderConfigData {
   is_cross_margin: boolean
   use_coin_pool: boolean
   use_oi_top: boolean
+  enable_news_monitoring: boolean
   initial_balance?: number // 可选：创建时不需要，编辑时使用
   scan_interval_minutes: number
 }
@@ -62,6 +63,8 @@ export function TraderConfigModal({
     is_cross_margin: true,
     use_coin_pool: false,
     use_oi_top: false,
+    enable_news_monitoring: false,
+    initial_balance: 1000,
     scan_interval_minutes: 3,
   })
   const [isSaving, setIsSaving] = useState(false)
@@ -246,6 +249,7 @@ export function TraderConfigModal({
         is_cross_margin: formData.is_cross_margin,
         use_coin_pool: formData.use_coin_pool,
         use_oi_top: formData.use_oi_top,
+        enable_news_monitoring: formData.enable_news_monitoring,
         scan_interval_minutes: formData.scan_interval_minutes,
       }
 
@@ -631,6 +635,19 @@ export function TraderConfigModal({
                 />
                 <label className="text-sm text-[#EAECEF]">
                   使用 OI Top 信号
+                </label>
+              </div>
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  checked={formData.enable_news_monitoring}
+                  onChange={(e) =>
+                    handleInputChange('enable_news_monitoring', e.target.checked)
+                  }
+                  className="w-4 h-4 rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500 focus:ring-offset-gray-800"
+                />
+                <label className="text-sm text-[#EAECEF]">
+                  启用新闻监控 (Enable News Monitoring)
                 </label>
               </div>
             </div>

@@ -396,6 +396,7 @@ type CreateTraderRequest struct {
 	IsCrossMargin        *bool   `json:"is_cross_margin"`        // 指针类型，nil表示使用默认值true
 	UseCoinPool          bool    `json:"use_coin_pool"`
 	UseOITop             bool    `json:"use_oi_top"`
+	EnableNewsMonitoring bool `json:"enable_news_monitoring"`
 }
 
 type ModelConfig struct {
